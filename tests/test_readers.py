@@ -351,3 +351,75 @@ class TestGWSReader:
             assert not hasattr(reader, method), (
                 f"書き込みメソッド '{method}' が存在してはいけません（元データ不変原則）"
             )
+
+
+# ============================================================
+# TestLocalFileReaderLimits: Excel/PDF のサイズ・展開量の上限
+# ============================================================
+
+class TestLocalFileReaderLimits:
+    """Excel・PDF にもサイズ上限と展開後の量の上限が効くこと."""
+
+    @staticmethod
+    def _make_xlsx(path, rows=1):
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        for i in range(rows):
+            ws.append([f"架空の値{i}", "サンプル"])
+        wb.save(str(path))
+
+    @staticmethod
+    def _make_pdf(path, pages=1):
+        from pypdf import PdfWriter
+        writer = PdfWriter()
+        for _ in range(pages):
+            writer.add_blank_page(width=200, height=200)
+        with open(str(path), "wb") as f:
+            writer.write(f)
+
+    def test_excel_file_size_limit(self, tmp_path):
+        from privacy_guard_mcp.readers.local import LocalFileReader, ReaderError
+        f = tmp_path / "a.xlsx"
+        self._make_xlsx(f)
+        with pytest.raises(ReaderError, match="ファイルサイズ超過"):
+            LocalFileReader(max_size_bytes=10).read_excel(str(f))
+
+    def test_pdf_file_size_limit(self, tmp_path):
+        from privacy_guard_mcp.readers.local import LocalFileReader, ReaderError
+        f = tmp_path / "a.pdf"
+        self._make_pdf(f)
+        with pytest.raises(ReaderError, match="ファイルサイズ超過"):
+            LocalFileReader(max_size_bytes=10).read_pdf(str(f))
+
+    def test_excel_content_chars_limit(self, tmp_path):
+        from privacy_guard_mcp.readers.local import LocalFileReader, ReaderError
+        f = tmp_path / "b.xlsx"
+        self._make_xlsx(f, rows=50)
+        with pytest.raises(ReaderError, match="文字数超過"):
+            LocalFileReader(max_content_chars=100).read_excel(str(f))
+
+    def test_pdf_page_limit(self, tmp_path):
+        from privacy_guard_mcp.readers.local import LocalFileReader, ReaderError
+        f = tmp_path / "b.pdf"
+        self._make_pdf(f, pages=5)
+        with pytest.raises(ReaderError, match="ページ数超過"):
+            LocalFileReader(max_pdf_pages=3).read_pdf(str(f))
+
+    def test_within_limits_still_readable(self, tmp_path):
+        from privacy_guard_mcp.readers.local import LocalFileReader
+        x = tmp_path / "c.xlsx"
+        p = tmp_path / "c.pdf"
+        self._make_xlsx(x, rows=2)
+        self._make_pdf(p, pages=2)
+        reader = LocalFileReader()
+        assert "架空の値0" in reader.read_excel(str(x))["content"]
+        assert reader.read_pdf(str(p))["page_count"] == 2
+
+    def test_limit_error_does_not_include_content(self, tmp_path):
+        from privacy_guard_mcp.readers.local import LocalFileReader, ReaderError
+        f = tmp_path / "d.xlsx"
+        self._make_xlsx(f, rows=50)
+        with pytest.raises(ReaderError) as e:
+            LocalFileReader(max_content_chars=100).read_excel(str(f))
+        assert "架空の値" not in str(e.value)

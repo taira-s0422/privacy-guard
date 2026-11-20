@@ -26,6 +26,13 @@ _WORD_EXTENSIONS = {".docx", ".doc"}
 # ファイルサイズ上限（デフォルト: 50MB）
 _DEFAULT_MAX_SIZE_BYTES = 50 * 1024 * 1024
 
+# 展開後の量の上限（Excel/PDF。圧縮された小さなファイルが巨大なテキストに展開されるのを防ぐ）
+# 既定 10,000,000 文字: 50MB 上限の日本語テキスト（約 1,700 万文字）より小さく、
+# 実務の表計算・文書は十分に収まる。
+_DEFAULT_MAX_CONTENT_CHARS = 10_000_000
+# PDF のページ数上限（既定 2,000 ページ: 文字が少ないページが大量にあるファイルも止める）
+_DEFAULT_MAX_PDF_PAGES = 2_000
+
 
 class ReaderError(Exception):
     """ファイル読み取りエラー.
@@ -43,13 +50,22 @@ class LocalFileReader:
     全メソッドは読み取り専用。書き込みメソッドは提供しない。
     """
 
-    def __init__(self, max_size_bytes: int = _DEFAULT_MAX_SIZE_BYTES) -> None:
+    def __init__(
+        self,
+        max_size_bytes: int = _DEFAULT_MAX_SIZE_BYTES,
+        max_content_chars: int = _DEFAULT_MAX_CONTENT_CHARS,
+        max_pdf_pages: int = _DEFAULT_MAX_PDF_PAGES,
+    ) -> None:
         """初期化.
 
         Args:
             max_size_bytes: 読み取り可能な最大ファイルサイズ（バイト）
+            max_content_chars: Excel/PDF から取り出すテキストの合計文字数の上限
+            max_pdf_pages: PDF の最大ページ数
         """
         self._max_size_bytes = max_size_bytes
+        self._max_content_chars = max_content_chars
+        self._max_pdf_pages = max_pdf_pages
 
     def read(self, file_path: str) -> Dict:
         """ファイルを読み取り、テキスト内容とメタデータを返す.
@@ -198,7 +214,7 @@ class LocalFileReader:
 
         path = self._validate_path(file_path)
         try:
-            file_size = path.stat().st_size
+            file_size = self._check_file_size(path)
 
             # read_only=True で元ファイルへの書き込みを防ぐ
             wb = openpyxl.load_workbook(str(path), read_only=True, data_only=True)
@@ -210,6 +226,7 @@ class LocalFileReader:
             has_images = self._check_excel_has_images(path)
 
             content_parts = []
+            total_chars = 0
             target_sheets = [sheet_name] if sheet_name else sheet_names
 
             for sname in target_sheets:
@@ -222,6 +239,8 @@ class LocalFileReader:
                     row_text = "\t".join(
                         str(cell) if cell is not None else "" for cell in row
                     )
+                    total_chars += len(row_text) + 1
+                    self._check_content_chars(total_chars)
                     content_parts.append(row_text)
 
             wb.close()
@@ -262,17 +281,24 @@ class LocalFileReader:
 
         path = self._validate_path(file_path)
         try:
-            file_size = path.stat().st_size
+            file_size = self._check_file_size(path)
 
             # 元データ不変: 読み取り専用モードで開く
             with open(str(path), "rb") as f:
                 reader = PdfReader(f)
                 page_count = len(reader.pages)
+                if page_count > self._max_pdf_pages:
+                    raise ReaderError(
+                        f"ページ数超過: {page_count:,} ページ > 上限 {self._max_pdf_pages:,} ページ"
+                    )
                 content_parts = []
                 has_images = False
+                total_chars = 0
 
                 for i, page in enumerate(reader.pages):
                     text = page.extract_text() or ""
+                    total_chars += len(text)
+                    self._check_content_chars(total_chars)
                     content_parts.append(f"=== ページ {i + 1} ===")
                     content_parts.append(text)
 
@@ -325,6 +351,30 @@ class LocalFileReader:
             raise ReaderError(f"指定パスはファイルではありません: {file_path}")
 
         return path
+
+    def _check_file_size(self, path: Path) -> int:
+        """ファイルサイズが上限以内か確認し、サイズを返す.
+
+        Raises:
+            ReaderError: ファイルサイズ超過時（ファイルの中身は含めない）
+        """
+        file_size = path.stat().st_size
+        if file_size > self._max_size_bytes:
+            raise ReaderError(
+                f"ファイルサイズ超過: {file_size:,} バイト > 上限 {self._max_size_bytes:,} バイト"
+            )
+        return file_size
+
+    def _check_content_chars(self, total_chars: int) -> None:
+        """展開後の合計文字数が上限以内か確認する.
+
+        Raises:
+            ReaderError: 文字数超過時（ファイルの中身は含めない）
+        """
+        if total_chars > self._max_content_chars:
+            raise ReaderError(
+                f"展開後の文字数超過: 上限 {self._max_content_chars:,} 文字を超えました"
+            )
 
     def _read_raw_bytes(self, path: Path) -> bytes:
         """ファイルのバイト列を読み取る.
