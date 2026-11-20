@@ -1,0 +1,84 @@
+# Privacy Guard MCP - マスキングルール設定
+# 仕様書セクション5.1準拠
+# 各カテゴリの有効/無効・マスクラベル・検知優先度を設定する
+
+masking_rules:
+  # 日本語個人名（辞書+形態素解析）
+  NAME_JA:
+    enabled: true
+    label: "MASKED_NAME"
+    priority: 10
+    method: "dictionary_regex"
+    description: "日本語の個人氏名（姓名）"
+
+  # 英語個人名
+  NAME_EN:
+    enabled: true
+    label: "MASKED_NAME_EN"
+    priority: 11
+    method: "regex"
+    description: "英語の個人氏名（First Last形式）"
+
+  # メールアドレス
+  EMAIL:
+    enabled: true
+    label: "MASKED_EMAIL"
+    priority: 20
+    method: "regex"
+    description: "メールアドレス（RFC 5321準拠）"
+
+  # 電話番号（日本）
+  PHONE_JP:
+    enabled: true
+    label: "MASKED_PHONE"
+    priority: 30
+    method: "regex"
+    description: "日本の電話番号・携帯番号（国際形式含む）"
+
+  # 住所（日本）
+  ADDRESS_JP:
+    enabled: true
+    label: "MASKED_ADDRESS"
+    priority: 40
+    method: "regex_dictionary"
+    description: "日本の住所（都道府県・市区町村・番地）"
+
+  # マイナンバー
+  MY_NUMBER:
+    enabled: true
+    label: "MASKED_MY_NUMBER"
+    priority: 50
+    method: "regex"
+    description: "マイナンバー（12桁の個人番号）"
+
+  # APIキー・トークン
+  API_KEY:
+    enabled: true
+    label: "MASKED_API_KEY"
+    priority: 60
+    method: "regex_entropy"
+    description: "APIキー・トークン・シークレット（高エントロピー文字列）"
+
+  # パスワード
+  PASSWORD:
+    enabled: true
+    label: "MASKED_PASSWORD"
+    priority: 70
+    method: "regex"
+    description: "パスワード文字列（password=xxx 形式等）"
+
+  # クレジットカード番号
+  CREDIT_CARD:
+    enabled: true
+    label: "MASKED_CC"
+    priority: 80
+    method: "regex_luhn"
+    description: "クレジットカード番号（Luhn検証付き）"
+
+  # 企業名
+  COMPANY_NAME:
+    enabled: true
+    label: "MASKED_COMPANY"
+    priority: 90
+    method: "dictionary"
+    description: "企業名・法人名（辞書マッチ）"

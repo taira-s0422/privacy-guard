@@ -1,0 +1,30 @@
+# Privacy Guard MCP - デフォルト設定
+# .env で上書き可能。環境変数が優先される。
+
+server:
+  name: "privacy-guard-mcp"
+  version: "1.0.0"
+  transport: "stdio"
+
+logging:
+  log_level: "INFO"  # DEBUG / INFO / WARNING / ERROR
+  log_format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+
+security:
+  fail_close: true   # マスキング異常時はデータ遮断（絶対に変更しない）
+  allow_partial_mask: false  # 部分マスクを許容しない
+
+masking:
+  rules_path: "privacy_guard_mcp/config/masking_rules.yaml"
+  exclusions_path: "privacy_guard_mcp/config/exclusions.yaml"
+  # セッション内IDフォーマット: [LABEL_NNN]
+  id_format: "[{label}_{index:03d}]"
+  # エントロピー閾値（APIキー検知用）
+  entropy_threshold: 4.5
+
+dictionary:
+  paths:
+    names_ja: "privacy_guard_mcp/config/dictionaries/names_ja.yaml"
+    company_names: "privacy_guard_mcp/config/dictionaries/company_names.yaml"
+    address_keywords: "privacy_guard_mcp/config/dictionaries/address_keywords.yaml"
+  cache_enabled: true

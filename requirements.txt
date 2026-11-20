@@ -1,0 +1,22 @@
+# Privacy Guard MCP - 依存パッケージ
+# pyproject.toml と同期して管理する
+
+# MCPフレームワーク
+fastmcp>=2.0.0
+
+# 設定・環境変数
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# ファイル読み込み
+chardet>=5.0.0
+openpyxl>=3.1.0
+pypdf>=4.0.0
+pandas>=2.0.0
+
+# テスト用（架空データ生成）
+faker>=24.0.0
+
+# 開発・テスト依存
+pytest>=8.0.0
+pytest-cov>=5.0.0

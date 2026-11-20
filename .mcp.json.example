@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "privacy-guard-mcp": {
+      "command": "/path/to/privacy-guard/.venv-312/bin/python",
+      "args": ["-m", "privacy_guard_mcp.server"],
+      "cwd": "/path/to/privacy-guard"
+    }
+  }
+}

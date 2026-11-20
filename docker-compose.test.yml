@@ -1,0 +1,57 @@
+# Privacy Guard MCP - Docker Compose テスト環境
+# 用途: ローカル環境に依存せずテストを実行するための隔離環境
+#
+# 使い方:
+#   docker compose -f docker-compose.test.yml up --build
+#   docker compose -f docker-compose.test.yml run --rm test pytest tests/ -v
+#
+# 設計原則:
+#   - ネットワーク通信なし（--network none 相当）
+#   - ボリュームマウントなし（元データ不変）
+#   - 環境変数で FAIL_CLOSE=true を明示
+
+services:
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: privacy-guard-mcp:test
+    container_name: privacy-guard-mcp-test
+    # フェイルクローズを明示
+    environment:
+      - FAIL_CLOSE=true
+      - LOG_LEVEL=WARNING
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    # テスト実行コマンド
+    command: pytest tests/ -v --tb=short --no-header
+    # ホストからのネットワーク隔離（セキュリティ）
+    network_mode: none
+    # リソース制限
+    mem_limit: 512m
+    # 終了後にコンテナを削除
+    restart: "no"
+
+  # E2E テスト（ダミーデータ生成 → 全7ツール検証）
+  e2e:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: privacy-guard-mcp:test
+    container_name: privacy-guard-mcp-e2e
+    environment:
+      - FAIL_CLOSE=true
+      - LOG_LEVEL=WARNING
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    # E2Eテスト専用コマンド
+    command: >
+      sh -c "
+        echo '=== Generating dummy data ===' &&
+        python tests/generate_dummy_data.py /tmp/dummy_data &&
+        echo '=== Running E2E tests ===' &&
+        pytest tests/test_e2e.py -v --tb=short --no-header -s
+      "
+    network_mode: none
+    mem_limit: 512m
+    restart: "no"
