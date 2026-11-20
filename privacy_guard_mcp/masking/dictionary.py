@@ -129,22 +129,45 @@ class DictionaryMatcher:
 
         判定ロジック:
         - text 全体が除外語と完全一致 → True
-        - text に含まれる空白区切りトークンのいずれかが除外語と完全一致 → True
+        - text の空白区切りトークンがすべて除外語 → True
           （例: 「電話番号 住所」のようなヘッダ連結に対応）
+        - 一部だけが除外語の場合は False（残りは split_excluded で取り出す）
         """
         if not text:
             return False
+        if not self._name_exclusion_keywords:
+            return False
+        return not self.split_excluded(text)
+
+    def split_excluded(self, text: str) -> List[Tuple[str, int, int]]:
+        """text から除外語のトークンを除いた残りの範囲を返す.
+
+        空白（半角・全角）区切りのトークンのうち除外語でないものを、
+        連続する範囲ごとにまとめて (部分文字列, 開始位置, 終了位置) で返す。
+        除外語が無ければ text 全体の1件、すべて除外語なら空リストになる。
+        """
+        if not text:
+            return []
         kws = self._name_exclusion_keywords
         if not kws:
-            return False
+            return [(text, 0, len(text))]
         if text in kws:
-            return True
-        # 空白（半角・全角）で分割して各トークンを判定
-        tokens = re.split(r"[\s　]+", text)
-        for tok in tokens:
-            if tok and tok in kws:
-                return True
-        return False
+            return []
+        runs: List[Tuple[str, int, int]] = []
+        run_start: Optional[int] = None
+        run_end = 0
+        for m in re.finditer(r"[^\s　]+", text):
+            if m.group(0) in kws:
+                if run_start is not None:
+                    runs.append((text[run_start:run_end], run_start, run_end))
+                    run_start = None
+                continue
+            if run_start is None:
+                run_start = m.start()
+            run_end = m.end()
+        if run_start is not None:
+            runs.append((text[run_start:run_end], run_start, run_end))
+        return runs
 
     def _load_dictionaries(self, dictionary_dir: Optional[str]) -> None:
         """辞書ファイルを読み込む.
@@ -257,10 +280,9 @@ class DictionaryMatcher:
         if self._fullname_pattern:
             for match in self._fullname_pattern.finditer(text):
                 matched = match.group(0)
-                # 列ヘッダ等の除外語に該当する場合はスキップ
-                if self.is_name_excluded(matched):
-                    continue
-                results.append((matched, match.start(), match.end()))
+                # 列ヘッダ等の除外語は除き、残りの範囲だけを名前として扱う
+                for sub, rs, re_ in self.split_excluded(matched):
+                    results.append((sub, match.start() + rs, match.start() + re_))
 
         # 重複を除去（フルネームマッチを優先）
         return self._deduplicate_spans(results)

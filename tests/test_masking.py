@@ -567,3 +567,25 @@ class TestSystemKeywordExclusion:
         # localhost等の元語は素通りで残ること
         if "localhost" in text:
             assert "localhost" in result
+
+
+class TestPartialExclusionKeepsRemainder:
+    """除外語が名前候補の一部だけの時、除外語を除いた残りがマスクされること."""
+
+    @pytest.mark.parametrize("text,kept,leaked", [
+        ("担当 乙川", "担当", "乙川"),
+        ("部長 蘆花 弦", "部長", "蘆花"),
+    ])
+    def test_name_next_to_exclusion_word_is_masked(self, engine, session, text, kept, leaked):
+        result = engine.mask(text, session)
+        assert leaked not in result, f"除外語の隣の氏名が漏れた: {result}"
+        assert kept in result
+        assert "MASKED_NAME" in result
+
+    def test_split_excluded_keeps_only_remainder(self):
+        from privacy_guard_mcp.masking.dictionary import DictionaryMatcher
+        d = DictionaryMatcher()
+        assert d.split_excluded("電話番号 住所") == []
+        assert d.split_excluded("担当 乙川") == [("乙川", 3, 5)]
+        assert d.is_name_excluded("電話番号 住所") is True
+        assert d.is_name_excluded("担当 乙川") is False

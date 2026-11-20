@@ -218,10 +218,22 @@ class MaskingEngine:
                         MaskingCategory.NAME_JA,
                         MaskingCategory.NAME_EN,
                     ):
-                        if self._dictionary.is_name_excluded(matched_text):
+                        runs = self._dictionary.split_excluded(matched_text)
+                        if not runs:
                             logger.debug(
                                 f"{compiled_pattern.category.value}候補をスキップ（除外語ヒット）: span=({start},{end})"
                             )
+                            continue
+                        if runs != [(matched_text, 0, len(matched_text))]:
+                            # 一部だけが除外語: 除外語を除いた残りの範囲をマスクする
+                            for sub, rs, re_ in runs:
+                                sub_start, sub_end = start + rs, start + re_
+                                if self._is_already_masked(sub_start, sub_end, masked_spans):
+                                    continue
+                                mask_id = session.get_or_create_mask_id(
+                                    compiled_pattern.category.value, sub
+                                )
+                                masked_spans.append((sub_start, sub_end, mask_id))
                             continue
 
                     # 注意: PASSWORD カテゴリは match.group(0) 全体（"password=XXX" のキーワード込み）が
